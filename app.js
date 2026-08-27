@@ -177,12 +177,24 @@ function addTermToClass() {
 
 function addWeek() {
     const term = state.classes.find(c => c.id === currentClassId).terms.find(t => t.id === currentTermId);
+    // Auto-generate Sunday–Thursday dates starting from next Sunday
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0=Sun
+    const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+    const nextSunday = new Date(today);
+    nextSunday.setDate(today.getDate() + daysUntilSunday);
+
+    const defaultDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
+    const days = defaultDays.map((name, i) => {
+        const d = new Date(nextSunday);
+        d.setDate(nextSunday.getDate() + i);
+        const dateStr = d.toISOString().split('T')[0];
+        return { id: generateId(), title: name, date: dateStr, maxHW: 2, maxCW: 10 };
+    });
+
     term.weeks.push({
         id: generateId(), name: `Week ${term.weeks.length + 1}`,
-        maxWkQuiz: 20,
-        days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-            .map(d => ({ id: generateId(), title: d, maxHW: 2, maxCW: 10 })),
-        records: {}
+        maxWkQuiz: 20, days, records: {}
     });
     saveState(); renderClassDashboard();
 }
@@ -190,7 +202,7 @@ function addWeek() {
 function addDayToWeek() {
     const term = state.classes.find(c => c.id === currentClassId).terms.find(t => t.id === currentTermId);
     const week = term.weeks.find(w => w.id === currentWeekId);
-    week.days.push({ id: generateId(), title: 'New Day', maxHW: 2, maxCW: 10 });
+    week.days.push({ id: generateId(), title: 'New Day', date: '', maxHW: 2, maxCW: 10 });
     saveState(); renderWeekGrid();
 }
 
@@ -338,12 +350,16 @@ function renderWeekGrid() {
     week.days.forEach(day => {
         const thG = document.createElement('th');
         thG.colSpan = 3;
-        thG.className = 'border-b border-x border-slate-200 bg-slate-50 p-2 min-w-[210px] text-center relative group';
+        thG.className = 'border-b border-x border-slate-200 bg-slate-50 p-1.5 min-w-[200px] text-center relative group';
         thG.innerHTML = `
-            <input type="text" class="day-header-input text-base text-slate-800" value="${day.title}">
-            <button class="del-day absolute top-2 right-2 text-slate-300 hover:text-red-500 hidden group-hover:block"><i class="ph ph-trash text-base"></i></button>
+            <div class="flex flex-col items-center gap-0.5">
+                <input type="date" class="day-date-input text-[10px] text-slate-400 bg-transparent border-none outline-none cursor-pointer w-full text-center" value="${day.date || ''}" title="Day date">
+                <input type="text" class="day-header-input text-sm text-slate-800" value="${day.title}">
+            </div>
+            <button class="del-day absolute top-1 right-1 text-slate-300 hover:text-red-500 hidden group-hover:block"><i class="ph ph-trash text-sm"></i></button>
         `;
-        thG.querySelector('input').addEventListener('change', e => { day.title = e.target.value; saveState(); });
+        thG.querySelector('.day-date-input').addEventListener('change', e => { day.date = e.target.value; saveState(); });
+        thG.querySelector('.day-header-input').addEventListener('change', e => { day.title = e.target.value; saveState(); });
         thG.querySelector('.del-day').addEventListener('click', () => { if (confirm('Delete day?')) { week.days = week.days.filter(d => d.id !== day.id); saveState(); renderWeekGrid(); } });
         t1.appendChild(thG);
 
@@ -373,7 +389,7 @@ function renderWeekGrid() {
         `;
 
         week.days.forEach(d => {
-            if (!sRec[d.id]) sRec[d.id] = { att: false, hw: '', cw: 0 };
+            if (!sRec[d.id]) sRec[d.id] = { att: true, hw: '', cw: 0 };
             const r = sRec[d.id];
             const hwDisplay = r.hw === '' ? '-' : r.hw;
 
@@ -455,39 +471,106 @@ function renderRosterList() {
 }
 
 // ─── Excel Export ─────────────────────────────────────────────────────────────
-function exportExcel(mode) {
+async function exportExcel(mode) {
     const cls = state.classes.find(c => c.id === currentClassId);
     const term = cls.terms.find(t => t.id === currentTermId);
-    const wb = XLSX.utils.book_new();
-
     const weeksToExport = mode === 'term' ? term.weeks : [term.weeks.find(w => w.id === currentWeekId)];
     if (!weeksToExport.length) return alert('Nothing to export.');
 
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Follow-Up Sheet';
+    wb.created = new Date();
+
+    const thin = { style: 'thin', color: { argb: 'FFCBD5E1' } };
+    const border = { top: thin, left: thin, bottom: thin, right: thin };
+    const fillHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+    const fillSubHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF0FF' } };
+    const fillStripe = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+    const fontHeader = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    const fontSubHeader = { bold: true, color: { argb: 'FF4338CA' }, size: 10 };
+    const centerMid = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    const leftMid = { vertical: 'middle', horizontal: 'left' };
+
     weeksToExport.forEach(w => {
+        const safeName = w.name.substring(0, 31).replace(/[\\/?*[\]:]/g, '');
+        const ws = wb.addWorksheet(safeName, { views: [{ state: 'frozen', xSplit: 1, ySplit: 2 }] });
+
+        // Print setup — landscape, fit to one page wide, repeat the two
+        // header rows and the Student Name column on every printed page.
+        ws.pageSetup = {
+            orientation: 'landscape',
+            fitToPage: true,
+            fitToWidth: 1,
+            fitToHeight: 0,
+            horizontalCentered: true,
+            showGridLines: false,
+            margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 }
+        };
+        ws.pageSetup.printTitlesRow = '1:2';
+        ws.pageSetup.printTitlesColumn = 'A:A';
+        ws.headerFooter = {
+            oddHeader: `&L&B${cls.name} — ${term.name}&R&D`,
+            oddFooter: `&C${w.name}&RPage &P of &N`
+        };
+
         const h1 = ['Student Name'];
         const h2 = [''];
         w.days.forEach(d => { h1.push(d.title, '', ''); h2.push('HW', 'CW', 'ATT'); });
         h1.push('Final Quiz'); h2.push('Score');
+        ws.addRow(h1);
+        ws.addRow(h2);
 
-        const rows = [h1, h2];
-        cls.students.forEach(stu => {
-            const rObj = w.records[stu.id] || {};
-            const row = [stu.name];
-            w.days.forEach(d => {
-                const r = rObj[d.id] || { att: false, hw: 0, cw: 0 };
-                row.push(r.hw === '' ? '' : parseNum(r.hw), parseNum(r.cw), r.att ? '✔' : '✗');
+        // Merge each day title across its 3 sub-columns, and the two single-column
+        // headers (Student Name / Final Quiz) down across both header rows.
+        let col = 2;
+        w.days.forEach(() => { ws.mergeCells(1, col, 1, col + 2); col += 3; });
+        const quizCol = col;
+        ws.mergeCells(1, 1, 2, 1);
+        ws.mergeCells(1, quizCol, 2, quizCol);
+
+        [1, 2].forEach(r => {
+            const row = ws.getRow(r);
+            row.height = 20;
+            row.eachCell({ includeEmpty: true }, cell => {
+                cell.border = border;
+                cell.alignment = centerMid;
+                cell.fill = r === 1 ? fillHeader : fillSubHeader;
+                cell.font = r === 1 ? fontHeader : fontSubHeader;
             });
-            row.push(parseNum(rObj.quiz));
-            rows.push(row);
+        });
+        ws.getCell(1, 1).alignment = leftMid;
+        ws.getCell(1, 1).font = fontHeader;
+
+        cls.students.forEach((stu, idx) => {
+            const rObj = w.records[stu.id] || {};
+            const rowData = [stu.name];
+            w.days.forEach(d => {
+                const r = rObj[d.id] || { att: true, hw: 0, cw: 0 };
+                rowData.push(r.hw === '' ? '' : parseNum(r.hw), parseNum(r.cw), r.att ? '✔' : '✗');
+            });
+            rowData.push(parseNum(rObj.quiz));
+            const excelRow = ws.addRow(rowData);
+            excelRow.eachCell({ includeEmpty: true }, (cell, colNum) => {
+                cell.border = border;
+                cell.alignment = colNum === 1 ? leftMid : centerMid;
+                if (idx % 2 === 1) cell.fill = fillStripe;
+            });
+            excelRow.getCell(1).font = { bold: true, color: { argb: 'FF334155' } };
         });
 
-        const sheet = XLSX.utils.aoa_to_sheet(rows);
-        if (!sheet['!merges']) sheet['!merges'] = [];
-        let col = 1;
-        w.days.forEach(() => { sheet['!merges'].push({ s: { r: 0, c: col }, e: { r: 0, c: col + 2 } }); col += 3; });
-        sheet['!cols'] = [{ wch: 25 }, ...Array(w.days.length * 3).fill({ wch: 8 }), { wch: 14 }];
-        XLSX.utils.book_append_sheet(wb, sheet, w.name.substring(0, 31));
+        ws.getColumn(1).width = 24;
+        for (let c = 2; c < quizCol; c++) ws.getColumn(c).width = 8;
+        ws.getColumn(quizCol).width = 12;
     });
 
-    XLSX.writeFile(wb, `FollowUp_${cls.name}_${term.name}.xlsx`);
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `FollowUp_${cls.name}_${term.name}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
 }
