@@ -39,7 +39,12 @@
                         Sheet</h1>
                 </div>
             </div>
-            <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-3">
+                <div id="saveStatus" onclick="retrySave()"
+                    class="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full bg-white/50 border border-slate-200 cursor-default select-none">
+                    <span id="saveStatusDot" class="w-1.5 h-1.5 rounded-full bg-slate-300 flex-shrink-0"></span>
+                    <span id="saveStatusText" class="text-slate-500 whitespace-nowrap">Saved</span>
+                </div>
                 <div
                     class="bg-white/50 backdrop-blur border border-slate-200 px-4 py-2 rounded-full flex items-center space-x-2">
                     <div class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
