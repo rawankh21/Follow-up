@@ -331,6 +331,12 @@ function renderClassDashboard() {
 }
 
 // ─── Render Week Grid ─────────────────────────────────────────────────────────
+function getCurrentWeek() {
+    const cls = state.classes.find(c => c.id === currentClassId);
+    const term = cls.terms.find(t => t.id === currentTermId);
+    return term.weeks.find(w => w.id === currentWeekId);
+}
+
 function renderWeekGrid() {
     const cls = state.classes.find(c => c.id === currentClassId);
     const term = cls.terms.find(t => t.id === currentTermId);
@@ -417,38 +423,50 @@ function renderWeekGrid() {
     });
 
     // HW cycling: - → 2 → 1 → 0 → -
-    tbody.addEventListener('click', e => {
-        const btn = e.target.closest('.hw-cycle-btn');
-        if (!btn) return;
-        const sid = btn.getAttribute('data-sid');
-        const did = btn.getAttribute('data-did');
-        const curr = btn.getAttribute('data-val');
-        let next = curr === '' ? 2 : curr == '2' ? 1 : curr == '1' ? 0 : '';
-        week.records[sid][did].hw = next;
-        saveState();
-        renderWeekGrid();
-    });
+    // Attached ONCE — tbody is a persistent DOM node reused across every
+    // re-render, so re-adding listeners here on every renderWeekGrid() call
+    // was stacking duplicates (and since this handler itself calls
+    // renderWeekGrid(), each click doubled the listener count — 1, 2, 4, 8...
+    // exponential lag the longer a session runs). getCurrentWeek() is used
+    // instead of the closed-over `week` var so this stays correct even after
+    // switching weeks, since the handler is never re-attached.
+    if (!tbody.dataset.listenersBound) {
+        tbody.dataset.listenersBound = '1';
 
-    tbody.addEventListener('change', e => {
-        if (!e.target.classList.contains('editable-input') && !e.target.classList.contains('attend-check')) return;
-        const sid = e.target.getAttribute('data-sid');
-        const did = e.target.getAttribute('data-did');
-        const f = e.target.getAttribute('data-f');
+        tbody.addEventListener('click', e => {
+            const btn = e.target.closest('.hw-cycle-btn');
+            if (!btn) return;
+            const sid = btn.getAttribute('data-sid');
+            const did = btn.getAttribute('data-did');
+            const curr = btn.getAttribute('data-val');
+            let next = curr === '' ? 2 : curr == '2' ? 1 : curr == '1' ? 0 : '';
+            getCurrentWeek().records[sid][did].hw = next;
+            saveState();
+            renderWeekGrid();
+        });
 
-        if (e.target.type === 'checkbox') {
-            week.records[sid][did].att = e.target.checked;
-        } else if (f === 'quiz') {
-            let val = Math.min(Math.max(parseFloat(e.target.value) || 0, 0), week.maxWkQuiz);
-            e.target.value = val === 0 ? '' : val;
-            week.records[sid].quiz = val;
-        } else {
-            const day = week.days.find(d => d.id === did);
-            let val = Math.min(Math.max(parseFloat(e.target.value) || 0, 0), f === 'cw' ? day.maxCW : day.maxHW);
-            e.target.value = val === 0 ? '' : val;
-            week.records[sid][did][f] = val;
-        }
-        saveState();
-    });
+        tbody.addEventListener('change', e => {
+            if (!e.target.classList.contains('editable-input') && !e.target.classList.contains('attend-check')) return;
+            const sid = e.target.getAttribute('data-sid');
+            const did = e.target.getAttribute('data-did');
+            const f = e.target.getAttribute('data-f');
+            const liveWeek = getCurrentWeek();
+
+            if (e.target.type === 'checkbox') {
+                liveWeek.records[sid][did].att = e.target.checked;
+            } else if (f === 'quiz') {
+                let val = Math.min(Math.max(parseFloat(e.target.value) || 0, 0), liveWeek.maxWkQuiz);
+                e.target.value = val === 0 ? '' : val;
+                liveWeek.records[sid].quiz = val;
+            } else {
+                const day = liveWeek.days.find(d => d.id === did);
+                let val = Math.min(Math.max(parseFloat(e.target.value) || 0, 0), f === 'cw' ? day.maxCW : day.maxHW);
+                e.target.value = val === 0 ? '' : val;
+                liveWeek.records[sid][did][f] = val;
+            }
+            saveState();
+        });
+    }
 }
 
 // ─── Roster Render ────────────────────────────────────────────────────────────
