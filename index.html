@@ -11,7 +11,7 @@
         tailwind.config = { theme: { extend: { colors: { primary: '#4f46e5', secondary: '#4338ca', accent: '#ec4899' } } } }
     </script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 
     <!-- Firebase CDN (compat mode — works with script tags, no bundler needed) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -27,7 +27,7 @@
     <div id="app" class="flex-1 w-full flex flex-col relative z-10">
 
         <!-- Header -->
-        <header class="glass-panel sticky top-0 z-50 px-8 py-4 flex justify-between items-center hidden"
+        <header class="glass-panel sticky top-0 z-50 px-4 md:px-8 py-3 md:py-4 flex justify-between items-center hidden"
             id="mainHeader">
             <div class="flex items-center space-x-4 cursor-pointer hover:opacity-80 transition-opacity"
                 onclick="goToHome()">
@@ -51,11 +51,11 @@
             </div>
         </header>
 
-        <main class="flex-1 p-6 w-full flex flex-col gap-6" id="mainContent">
+        <main class="flex-1 p-3 md:p-6 w-full flex flex-col gap-4 md:gap-6" id="mainContent">
 
             <!-- SECURE LOGIN -->
             <div id="loginView"
-                class="flex-1 flex items-center justify-center animate-fade-in w-full absolute inset-0 z-50 bg-slate-50/50 backdrop-blur-sm">
+                class="flex items-center justify-center animate-fade-in fixed inset-0 z-50 bg-slate-50/60 backdrop-blur-sm px-4">
                 <div
                     class="glass-panel rounded-3xl p-10 max-w-md w-full mx-4 shadow-2xl relative overflow-hidden text-center">
                     <div
@@ -130,7 +130,7 @@
                         id="termTabContainer"></div>
                 </div>
 
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
                     <div class="lg:col-span-2 flex flex-col gap-5">
                         <div class="flex justify-between items-center px-1">
                             <div class="flex items-center space-x-3">
@@ -251,7 +251,7 @@
             <h3 class="text-3xl font-extrabold text-slate-800 mb-6 outfit">Create Class</h3>
             <input type="text" id="classNameInput"
                 class="w-full px-5 py-3 border-2 border-slate-200 rounded-xl outline-none focus:border-primary mb-6 font-medium text-lg"
-                placeholder="Class Name" onkeypress="if(event.key==='Enter') saveClass()">
+                placeholder="Term / Subject Name" onkeypress="if(event.key==='Enter') saveClass()">
             <button onclick="saveClass()"
                 class="w-full bg-slate-800 text-white py-4 rounded-xl font-bold hover:bg-primary transition-colors text-lg hover-lift">Initialize
                 Class</button>
