@@ -106,14 +106,47 @@ async function loadState() {
     goToHome();
 }
 
+let lastSaveFailed = false;
+
+function setSaveStatus(status) {
+    const dot = document.getElementById('saveStatusDot');
+    const text = document.getElementById('saveStatusText');
+    if (!dot || !text) return;
+    const styles = {
+        saving: { dot: 'bg-amber-400 animate-pulse', label: 'Saving…', text: 'text-amber-600' },
+        saved: { dot: 'bg-emerald-500', label: 'Saved', text: 'text-slate-500' },
+        error: { dot: 'bg-red-500', label: 'Save failed — tap to retry', text: 'text-red-600 font-semibold' }
+    }[status];
+    dot.className = `w-1.5 h-1.5 rounded-full flex-shrink-0 ${styles.dot}`;
+    text.className = `whitespace-nowrap ${styles.text}`;
+    text.textContent = styles.label;
+}
+
 async function saveState() {
     if (!currentUser) return;
+    setSaveStatus('saving');
     try {
         await userDoc().set({ classes: state.classes });
+        lastSaveFailed = false;
+        setSaveStatus('saved');
     } catch (e) {
         console.error('Save error:', e);
+        lastSaveFailed = true;
+        setSaveStatus('error');
     }
 }
+
+function retrySave() {
+    if (!lastSaveFailed) return;
+    saveState();
+}
+
+window.addEventListener('beforeunload', (e) => {
+    if (lastSaveFailed) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function generateId() { return Math.random().toString(36).substring(2, 9); }
