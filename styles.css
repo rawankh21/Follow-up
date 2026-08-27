@@ -457,6 +457,23 @@ h4,
     font-size: 0.7rem !important;
   }
 
+  /* Day date + day title header — was a literal 10px with zero mobile
+     override, so it was effectively unreadable on a phone. */
+  #weekView th.min-w-\[200px\] {
+    padding: 8px 4px !important;
+  }
+
+  #weekView .day-date-input {
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
+    color: #64748b !important;
+  }
+
+  #weekView .day-header-input {
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+  }
+
   /* ── Modals: bottom-sheet ── */
   #rosterModal>div,
   #newClassModal>div {
