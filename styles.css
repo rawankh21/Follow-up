@@ -511,6 +511,28 @@ h4,
     margin-bottom: 14px !important;
   }
 
+  /* "Add student" row (input + button) was a fixed-size side-by-side row
+     with no wrap — at desktop padding/font sizes it could overflow the
+     narrower mobile bottom-sheet and push the Add button half off-screen.
+     Stack it instead so both are always fully visible and full-width. */
+  #rosterModal .flex.space-x-3.mb-6 {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  #rosterModal .flex.space-x-3.mb-6>* {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+
+  #rosterModal #newStudentName {
+    padding: 10px 14px !important;
+  }
+
+  #rosterModal button[onclick="addStudent()"] {
+    padding: 10px 14px !important;
+  }
+
   /* Roster table renders th/td with p-4 in HTML/app.js */
   #rosterModal table th,
   #rosterModal table td {
