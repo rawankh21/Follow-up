@@ -152,6 +152,28 @@ window.addEventListener('beforeunload', (e) => {
 function generateId() { return Math.random().toString(36).substring(2, 9); }
 function parseNum(val) { return (!val && val !== 0) ? 0 : parseFloat(val) || 0; }
 
+// toISOString() converts to UTC first — for any timezone ahead of UTC
+// (e.g. Cairo, UTC+2/+3), generating a date late at night or early morning
+// can silently roll it back to the previous calendar day. These two helpers
+// stay in local time throughout, so the stored/displayed date always matches
+// the date the teacher actually meant.
+function toLocalDateStr(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function formatDateLabel(dateStr) {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-').map(Number);
+    if (!y || !m || !d) return '';
+    const dt = new Date(y, m - 1, d); // constructed in local time — never parse a
+    // 'YYYY-MM-DD' string directly with new Date(), that parses as UTC and can
+    // shift the displayed date by a day in the exact same way as above.
+    return dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
 // ─── Navigation ───────────────────────────────────────────────────────────────
 function goToHome() {
     show('rootDashboard'); hide('classDashboard'); hide('weekView');
@@ -221,7 +243,7 @@ function addWeek() {
     const days = defaultDays.map((name, i) => {
         const d = new Date(nextSunday);
         d.setDate(nextSunday.getDate() + i);
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = toLocalDateStr(d);
         return { id: generateId(), title: name, date: dateStr, maxHW: 2, maxCW: 10 };
     });
 
@@ -247,6 +269,17 @@ function updateQuizMaxWk() {
 }
 
 // ─── Analytics ────────────────────────────────────────────────────────────────
+// Accuracy rules (grades depend on this):
+//  - A day only counts toward the HW average if HW was actually recorded for
+//    it (blank/'' means "no HW that day" and is excluded entirely — it does
+//    NOT count as a zero).
+//  - A week only counts toward the Quiz average if a quiz score was actually
+//    recorded (blank means "no quiz that week" and is excluded).
+//  - Each day's own maxHW and each week's own maxWkQuiz are used as-is, so a
+//    25-point quiz week and a 20-point quiz week are weighted correctly
+//    relative to each other instead of assuming one fixed max.
+//  - An explicit score of 0 (student did it and scored zero / got no marks)
+//    IS included — only truly blank/ungraded entries are excluded.
 function calculateTermAnalytics(cls, termId) {
     const term = cls.terms.find(t => t.id === termId);
     return cls.students.map(stu => {
@@ -254,11 +287,16 @@ function calculateTermAnalytics(cls, termId) {
         term.weeks.forEach(w => {
             w.days.forEach(d => {
                 const r = (w.records[stu.id] || {})[d.id] || {};
-                hwE += parseNum(r.hw); hwM += d.maxHW;
+                if (r.hw !== '' && r.hw !== undefined && r.hw !== null) {
+                    hwE += parseNum(r.hw);
+                    hwM += d.maxHW;
+                }
             });
             const wR = w.records[stu.id] || {};
-            if (wR.quiz !== undefined) qzE += parseNum(wR.quiz);
-            qzM += w.maxWkQuiz;
+            if (wR.quiz !== '' && wR.quiz !== undefined && wR.quiz !== null) {
+                qzE += parseNum(wR.quiz);
+                qzM += w.maxWkQuiz;
+            }
         });
         return {
             id: stu.id, name: stu.name,
@@ -282,7 +320,7 @@ function renderRootDashboard() {
         cd.innerHTML = `
             <div class="flex justify-between items-start mb-6">
                 <h3 class="text-2xl font-extrabold text-slate-800 outfit">${cls.name}</h3>
-                <button class="delete-class text-slate-300 hover:text-red-500 hidden group-hover:block"><i class="ph ph-trash text-xl"></i></button>
+                <button class="delete-class text-red-300 hover:text-red-600 hover:bg-red-50 transition-colors p-1.5 rounded-full"><i class="ph ph-trash text-xl"></i></button>
             </div>
             <div class="space-y-3">
                 <div class="flex items-center space-x-3 text-slate-600 font-medium bg-white/50 px-3 py-2 rounded-xl"><i class="ph ph-users text-primary"></i><span>${cls.students.length} Enrolled</span></div>
@@ -333,7 +371,7 @@ function renderClassDashboard() {
             </div>
             <div class="flex items-center space-x-4">
                 <span class="text-sm font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-xl">${w.days.length} Days</span>
-                <button class="del-w text-slate-300 hover:text-red-500 hidden group-hover:block"><i class="ph ph-trash text-xl"></i></button>
+                <button class="del-w text-red-300 hover:text-red-600 hover:bg-red-50 transition-colors p-1.5 rounded-full"><i class="ph ph-trash text-xl"></i></button>
             </div>
         `;
         el.addEventListener('click', e => {
@@ -395,7 +433,7 @@ function renderWeekGrid() {
                 <input type="date" class="day-date-input text-[10px] text-slate-400 bg-transparent border-none outline-none cursor-pointer w-full text-center" value="${day.date || ''}" title="Day date">
                 <input type="text" class="day-header-input text-sm text-slate-800" value="${day.title}">
             </div>
-            <button class="del-day absolute top-1 right-1 text-slate-300 hover:text-red-500 hidden group-hover:block"><i class="ph ph-trash text-sm"></i></button>
+            <button class="del-day absolute top-1 right-1 text-red-300 hover:text-red-600 hover:bg-red-50 transition-colors p-1 rounded-full"><i class="ph ph-trash text-sm"></i></button>
         `;
         thG.querySelector('.day-date-input').addEventListener('change', e => { day.date = e.target.value; saveState(); });
         thG.querySelector('.day-header-input').addEventListener('change', e => { day.title = e.target.value; saveState(); });
@@ -428,7 +466,7 @@ function renderWeekGrid() {
         `;
 
         week.days.forEach(d => {
-            if (!sRec[d.id]) sRec[d.id] = { att: true, hw: '', cw: 0 };
+            if (!sRec[d.id]) sRec[d.id] = { att: true, hw: '', cw: '' };
             const r = sRec[d.id];
             const hwDisplay = r.hw === '' ? '-' : r.hw;
 
@@ -438,7 +476,7 @@ function renderWeekGrid() {
                     <span class="font-extrabold text-indigo-700 text-base pointer-events-none">${hwDisplay}</span>
                 </td>
                 <td class="p-0 border-b border-r border-slate-200 bg-amber-50/20">
-                    <input type="text" class="editable-input text-amber-700" value="${r.cw === 0 ? '' : r.cw}" data-sid="${stu.id}" data-did="${d.id}" data-f="cw">
+                    <input type="text" class="editable-input text-amber-700" value="${r.cw === '' || r.cw === undefined ? '' : r.cw}" data-sid="${stu.id}" data-did="${d.id}" data-f="cw">
                 </td>
                 <td class="p-0 border-b border-r border-slate-200 bg-emerald-50/20 text-center align-middle">
                     <input type="checkbox" class="w-5 h-5 accent-emerald-500 attend-check" data-sid="${stu.id}" data-did="${d.id}" ${r.att ? 'checked' : ''}>
@@ -446,10 +484,10 @@ function renderWeekGrid() {
             `;
         });
 
-        const qzVal = sRec.quiz || 0;
+        const qzVal = (sRec.quiz === '' || sRec.quiz === undefined) ? '' : sRec.quiz;
         tr.innerHTML += `
             <td class="p-0 border-b border-l-4 border-purple-200 bg-purple-50/80">
-                <input type="text" class="editable-input text-purple-700 font-bold text-base" value="${qzVal === 0 ? '' : qzVal}" data-sid="${stu.id}" data-f="quiz">
+                <input type="text" class="editable-input text-purple-700 font-bold text-base" value="${qzVal}" data-sid="${stu.id}" data-f="quiz">
             </td>
         `;
         tbody.appendChild(tr);
@@ -488,14 +526,24 @@ function renderWeekGrid() {
             if (e.target.type === 'checkbox') {
                 liveWeek.records[sid][did].att = e.target.checked;
             } else if (f === 'quiz') {
-                let val = Math.min(Math.max(parseFloat(e.target.value) || 0, 0), liveWeek.maxWkQuiz);
-                e.target.value = val === 0 ? '' : val;
-                liveWeek.records[sid].quiz = val;
+                const raw = e.target.value.trim();
+                if (raw === '') {
+                    liveWeek.records[sid].quiz = '';
+                } else {
+                    let val = Math.min(Math.max(parseFloat(raw) || 0, 0), liveWeek.maxWkQuiz);
+                    e.target.value = val;
+                    liveWeek.records[sid].quiz = val;
+                }
             } else {
                 const day = liveWeek.days.find(d => d.id === did);
-                let val = Math.min(Math.max(parseFloat(e.target.value) || 0, 0), f === 'cw' ? day.maxCW : day.maxHW);
-                e.target.value = val === 0 ? '' : val;
-                liveWeek.records[sid][did][f] = val;
+                const raw = e.target.value.trim();
+                if (raw === '') {
+                    liveWeek.records[sid][did][f] = '';
+                } else {
+                    let val = Math.min(Math.max(parseFloat(raw) || 0, 0), f === 'cw' ? day.maxCW : day.maxHW);
+                    e.target.value = val;
+                    liveWeek.records[sid][did][f] = val;
+                }
             }
             saveState();
         });
@@ -511,7 +559,7 @@ function renderRosterList() {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td class="p-4"><input type="text" class="w-full bg-transparent outline-none font-bold" value="${stu.name}"></td>
-            <td class="p-4 text-center"><button class="text-slate-300 hover:text-red-500"><i class="ph ph-trash text-xl"></i></button></td>
+            <td class="p-4 text-center"><button class="text-red-300 hover:text-red-600 hover:bg-red-50 transition-colors p-1.5 rounded-full"><i class="ph ph-trash text-xl"></i></button></td>
         `;
         tr.querySelector('input').addEventListener('change', e => { stu.name = e.target.value; saveState(); });
         tr.querySelector('button').addEventListener('click', () => {
@@ -566,7 +614,11 @@ async function exportExcel(mode) {
 
         const h1 = ['Student Name'];
         const h2 = [''];
-        w.days.forEach(d => { h1.push(d.title, '', ''); h2.push('HW', 'CW', 'ATT'); });
+        w.days.forEach(d => {
+            const dateLabel = formatDateLabel(d.date);
+            h1.push(dateLabel ? `${d.title}\n${dateLabel}` : d.title, '', '');
+            h2.push('HW', 'CW', 'ATT');
+        });
         h1.push('Final Quiz'); h2.push('Score');
         ws.addRow(h1);
         ws.addRow(h2);
@@ -581,7 +633,7 @@ async function exportExcel(mode) {
 
         [1, 2].forEach(r => {
             const row = ws.getRow(r);
-            row.height = 20;
+            row.height = r === 1 ? 32 : 20;
             row.eachCell({ includeEmpty: true }, cell => {
                 cell.border = border;
                 cell.alignment = centerMid;
@@ -596,10 +648,13 @@ async function exportExcel(mode) {
             const rObj = w.records[stu.id] || {};
             const rowData = [stu.name];
             w.days.forEach(d => {
-                const r = rObj[d.id] || { att: true, hw: 0, cw: 0 };
-                rowData.push(r.hw === '' ? '' : parseNum(r.hw), parseNum(r.cw), r.att ? '✔' : '✗');
+                const r = rObj[d.id] || { att: true, hw: '', cw: '' };
+                const hwOut = (r.hw === '' || r.hw === undefined) ? '' : parseNum(r.hw);
+                const cwOut = (r.cw === '' || r.cw === undefined) ? '' : parseNum(r.cw);
+                rowData.push(hwOut, cwOut, r.att ? '✔' : '✗');
             });
-            rowData.push(parseNum(rObj.quiz));
+            const qzOut = (rObj.quiz === '' || rObj.quiz === undefined) ? '' : parseNum(rObj.quiz);
+            rowData.push(qzOut);
             const excelRow = ws.addRow(rowData);
             excelRow.eachCell({ includeEmpty: true }, (cell, colNum) => {
                 cell.border = border;
